@@ -1,76 +1,71 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 
 interface ScrambleTextProps {
   text: string;
-  className?: string;
   delay?: number;
 }
 
-const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
-
-export default function ScrambleText({ text, className = '', delay = 0 }: ScrambleTextProps) {
-  const [displayText, setDisplayText] = useState('');
-  const intervalRef = useRef<number>();
-  const frameRef = useRef(0);
+const ScrambleText = memo(({ text, delay = 0 }: ScrambleTextProps) => {
+  const elementRef = useRef<HTMLSpanElement>(null);
+  const frameRef = useRef<number>();
   const originalTextRef = useRef(text);
-  const shouldScrambleRef = useRef<boolean[]>([]);
+  const chars = '!<>-_\\/[]{}—=+*^?#________';
 
   useEffect(() => {
-    // Randomly decide which characters should be scrambled
-    shouldScrambleRef.current = text.split('').map(() => Math.random() > 0.7);
+    if (!elementRef.current) return;
+    
+    let frame = 0;
+    let resolve: (() => void) | null = null;
+    const queue = Promise.resolve();
 
-    const startAnimation = () => {
-      let frame = 0;
-      const totalFrames = 40;
-      const finalText = originalTextRef.current;
+    const scramble = () => {
+      let update = '';
+      let complete = 0;
 
-      const animate = () => {
-        frame++;
-        const progress = frame / totalFrames;
-
-        let currentText = '';
-        for (let i = 0; i < finalText.length; i++) {
-          // If this character shouldn't be scrambled, just show it immediately
-          if (!shouldScrambleRef.current[i]) {
-            currentText += finalText[i];
-            continue;
-          }
-
-          if (progress * finalText.length > i) {
-            currentText += finalText[i];
-          } else if (progress * (finalText.length + 12) > i) {
-            currentText += characters[Math.floor(Math.random() * characters.length)];
+      for (let i = 0, n = originalTextRef.current.length; i < n; i++) {
+        if (i < frame) {
+          complete++;
+          update += originalTextRef.current[i];
+        } else {
+          if (Math.random() < 0.28) {
+            update += chars[Math.floor(Math.random() * chars.length)];
           } else {
-            currentText += ' ';
+            update += originalTextRef.current[i];
           }
         }
+      }
 
-        setDisplayText(currentText);
+      elementRef.current!.textContent = update;
 
-        if (frame < totalFrames) {
-          frameRef.current = requestAnimationFrame(animate);
-        }
-      };
-
-      frameRef.current = requestAnimationFrame(animate);
+      if (complete === originalTextRef.current.length) {
+        if (resolve) resolve();
+      } else {
+        frameRef.current = requestAnimationFrame(scramble);
+        frame = Math.min(frame + (1 + Math.floor(Math.random() * 3)), originalTextRef.current.length);
+      }
     };
 
-    const timer = setTimeout(startAnimation, delay);
+    queue.then(() => new Promise<void>(res => {
+      resolve = res;
+      setTimeout(() => {
+        frameRef.current = requestAnimationFrame(scramble);
+      }, delay);
+    }));
 
     return () => {
-      clearTimeout(timer);
       if (frameRef.current) {
         cancelAnimationFrame(frameRef.current);
       }
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
     };
-  }, [delay]);
+  }, [delay, chars]);
 
   return (
-    <span className={className}>
-      {displayText || text}
+    <span ref={elementRef} aria-label={text}>
+      {text}
     </span>
   );
-}
+});
+
+ScrambleText.displayName = 'ScrambleText';
+
+export default ScrambleText;
